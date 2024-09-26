@@ -3,9 +3,21 @@ from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 import psycopg2
 import os
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 app = FastAPI()
+
+origins=[
+    "http://localhost:3000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 print(DATABASE_URL)
@@ -52,8 +64,17 @@ def get_user(user_id: int, cursor: psycopg2.extensions.cursor = Depends(get_db))
     
 @app.put("/users/{user_id}")
 def update_user(user_id: int, user: User, cursor: psycopg2.extensions.cursor = Depends(get_db)):
+    cursor.execute("SELECT name, email FROM users WHERE id=%s", (user_id,))
+    current_user = cursor.fetchone()
+
+    if not current_user:
+        raise HTTPException(status_code=404, detail="User cannot be found")
+    
+    new_name = user.name if user.name else current_user[0]
+    new_email = user.email if user.email else current_user[1]
+
     cursor.execute("UPDATE users SET name = %s, email = %s WHERE id = %s", 
-                   (user.name, user.email, user_id))
+                   (new_name, new_email, user_id))
     conn.commit()
     return {"message": "User updated successfully"}
 
